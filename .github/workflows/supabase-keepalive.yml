@@ -1,0 +1,57 @@
+name: Supabase Keep Alive
+
+on:
+  schedule:
+    # Every day at 03:17 UTC
+    # = 10:17 AM Thailand time
+    - cron: "17 3 * * *"
+
+  workflow_dispatch:
+
+jobs:
+  keep-alive:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Ping Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          set -e
+
+          echo "Pinging Supabase..."
+
+          RESPONSE=$(curl -sS -o /tmp/response.txt -w "%{http_code}" \
+            -X POST \
+            "${SUPABASE_URL}/rest/v1/keep_alive" \
+            -H "apikey: ${SUPABASE_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_KEY}" \
+            -H "Content-Type: application/json" \
+            -H "Prefer: return=minimal" \
+            --data '{}')
+
+          echo "HTTP status: $RESPONSE"
+
+          if [ "$RESPONSE" -ge 200 ] && [ "$RESPONSE" -lt 300 ]; then
+            echo "Supabase is alive."
+          else
+            echo "Supabase request failed:"
+            cat /tmp/response.txt
+            exit 1
+          fi
+
+      - name: Clean old entries
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          echo "Cleaning old entries..."
+
+          curl -sS \
+            -X DELETE \
+            "${SUPABASE_URL}/rest/v1/keep_alive?pinged_at=lt.$(date -u -d '7 days ago' '+%Y-%m-%dT%H:%M:%SZ')" \
+            -H "apikey: ${SUPABASE_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_KEY}"
+
+          echo "Cleanup complete."
